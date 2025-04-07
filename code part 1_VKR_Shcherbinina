@@ -1,0 +1,80 @@
+#ЧАСТЬ 1
+#Генерация слоя городских кварталов
+
+# Установка необходимых библиотек
+!pip install blocksnet ipykernel -q
+!pip install mapclassify -q
+
+# Импорт библиотек
+import osmnx as ox
+from blocksnet import BlocksGenerator, BlocksSplitter
+
+# Получение границ Московского района Санкт-Петербурга
+boundary = ox.geocode_to_gdf('Санкт-Петербург, Московский район')
+boundary.plot()
+
+# Определение тегов для различных объектов
+tags = {
+    'roads': {
+        "highway": ["construction", "crossing", "living_street", "motorway", "motorway_link", 
+                    "motorway_junction", "pedestrian", "primary", "primary_link", "raceway", 
+                    "residential", "road", "secondary", "secondary_link", "services", 
+                    "tertiary", "tertiary_link", "track", "trunk", "trunk_link", 
+                    "turning_circle", "turning_loop", "unclassified"],
+        "service": ["living_street", "emergency_access"]
+    },
+    'railways': {
+        "railway": "rail"
+    },
+    'water': {
+        'riverbank': True,
+        'reservoir': True,
+        'basin': True,
+        'dock': True,
+        'canal': True,
+        'pond': True,
+        'natural': ['water', 'bay'],
+        'waterway': ['river', 'canal', 'ditch', 'stream', 'dam'],
+        'landuse': 'basin',
+        'water': 'lake'
+    }
+}
+
+# Извлечение объектов из OpenStreetMap
+water = ox.features_from_polygon(boundary.unary_union, tags['water'])
+roads = ox.features_from_polygon(boundary.unary_union, tags['roads'])
+railways = ox.features_from_polygon(boundary.unary_union, tags['railways'])
+
+# Преобразование координат в локальную систему координат
+local_crs = boundary.estimate_utm_crs()
+boundary = boundary.reset_index()[['geometry']].to_crs(local_crs)
+water = water.reset_index()[['geometry']].to_crs(local_crs)
+roads = roads.reset_index()[['geometry']].to_crs(local_crs)
+railways = railways.reset_index()[['geometry']].to_crs(local_crs)
+
+# Фильтрация типов геометрии для дорог
+roads = roads[roads.geom_type.isin(['LineString', 'MultiLineString'])]
+
+# Генерация блоков
+bg = BlocksGenerator(boundary, roads, railways, water)
+blocks = bg.run()
+
+# Визуализация сгенерированных блоков
+blocks.explore()
+
+# Извлечение зданий из OpenStreetMap
+buildings = ox.features_from_polygon(boundary.to_crs(4326).unary_union, {'building': True})
+buildings = buildings.to_crs(local_crs).reset_index()[['geometry']]
+buildings.geometry = buildings.representative_point()
+
+# Разделение блоков на основе зданий
+bs = BlocksSplitter(blocks, buildings)
+splitted_blocks = bs.run(n_clusters=4, points_quantile=0.98, area_quantile=0.95)
+
+# Вывод количества блоков и визуализация
+len(blocks), len(splitted_blocks)
+blocks.plot(linewidth=0.1, figsize=(10, 10)).set_axis_off()
+splitted_blocks.plot(linewidth=0.1, figsize=(10, 10)).set_axis_off()
+
+# Сохранение разделенных блоков в файл GeoJSON
+splitted_blocks.to_file('blocks.geojson')
