@@ -1,0 +1,54 @@
+#ЧАСТЬ 2
+# Подготовка
+!pip install blocksnet iduedu mapclassify -qq
+import geopandas as gpd
+import os
+from iduedu import get_boundary, get_drive_graph
+from blocksnet import AccessibilityProcessor
+import osmnx as ox
+import matplotlib.pyplot as plt
+from blocksnet.models import City
+from blocksnet import Accessibility, Connectivity
+
+# Установка пути к данным
+data_path = '/content/data'  # Путь к папке, где будут храниться данные
+
+# Загрузка кварталов
+blocks = gpd.read_file(os.path.join(data_path, 'blocks_Moskovsky.geojson'))  # Считываем кварталы из файла
+
+# Получение границ района
+bounds = get_boundary(osm_id=338636)  # Получаем границы Московского района по OSM ID
+
+# Создание пешеходного графа
+G_pedestrian = ox.graph_from_polygon(bounds, network_type='walk')  # Создаем граф пешеходной сети
+
+
+# Исправление графа
+AccessibilityProcessor._fix_graph(G_pedestrian)  # Исправляем граф
+
+# Визуализация графа
+fig, ax = ox.plot_graph(G_pedestrian, 
+                         node_color='black',  # цвет вершин
+                         edge_color='grey',  # цвет ребер
+                         bgcolor='white',  # цвет подложки
+                         node_size=2,  # размер вершин
+                         edge_linewidth=2,  # толщина ребер
+                         figsize=(25, 25))  # размер картинки
+fig.savefig(os.path.join(data_path, 'drive_graph_image.png'))  # Сохраняем изображение графа
+
+# Сохранение узлов и ребер графа
+n, e = ox.graph_to_gdfs(G_pedestrian)  # Преобразуем граф в GeoDataFrame
+n.to_file(os.path.join(data_path, "G_pedestrian_nodes.geojson"))  # Сохраняем узлы
+e.to_file(os.path.join(data_path, "G_pedestrian_edges.geojson"))  # Сохраняем ребра
+
+# Создание матрицы доступности
+ap = AccessibilityProcessor(blocks)  # Создаем экземпляр AccessibilityProcessor
+acc_mx = ap.get_accessibility_matrix(G_pedestrian)  # Вычисляем матрицу доступности
+acc_mx.head()  # Выводим первые 5 строк матрицы
+acc_mx.to_pickle(os.path.join(data_path, 'acc_mx.pickle'))  # Сохраняем матрицу доступности
+
+# Создание модели города
+blocks['land_use'] = None  # Добавляем столбец land_use
+city = City(blocks=blocks, acc_mx=acc_mx)  # Создаем модель города
+print(city)
+city.to_pickle(os.path.join(data_path, 'city_model.pickle'))  # Сохраняем модель города
