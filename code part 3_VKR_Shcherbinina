@@ -1,0 +1,173 @@
+#ЧАСТЬ 3
+# Установка необходимых библиотек
+!pip install blocksnet ipykernel mapclassify -qq
+
+# Импорт библиотек
+import geopandas as gpd
+import pandas as pd
+import os
+import osmnx as ox
+import warnings
+from blocksnet import City, ServiceType, LandUsePrediction, Provision
+from blocksnet.models.service_type import ServiceBrick
+
+# Отключение предупреждений
+warnings.filterwarnings("ignore")
+
+# Настройка пути к данным
+data_path = '/content/data'
+
+# Загрузка модели города
+District_spb = City.from_pickle(os.path.join(data_path, 'city_model.pickle'))
+
+# Загрузка зданий в модель
+buildings = gpd.read_file(os.path.join(data_path, 'buildings_R.geojson'))
+local_crs = buildings.estimate_utm_crs()
+District_spb.update_buildings(buildings)
+
+# Добавление нового типа сервиса (спортивный центр)
+District_spb.add_service_type(ServiceType(
+    code='5.5.5',
+    name='sport_centre',
+    accessibility=15,
+    demand=8,
+    land_use=["residential", "business", "recreation"],
+    bricks=[
+        {"capacity": 50, "area": 700.0, "is_integrated": False, "parking_area": 0},
+        {"capacity": 100, "area": 1000.0, "is_integrated": False, "parking_area": 0},
+        {"capacity": 300, "area": 3000.0, "is_integrated": False, "parking_area": 0},
+        {"capacity": 30, "area": 300.0, "is_integrated": True, "parking_area": 125.0},
+        {"capacity": 50, "area": 500.0, "is_integrated": True, "parking_area": 220.0},
+        {"capacity": 100, "area": 900.0, "is_integrated": True, "parking_area": 500.0},
+    ]
+))
+# Работа с моделью
+# Определение типа землепользования
+lup = LandUsePrediction(city_model=District_spb)
+lu_blocks = lup.calculate()
+lup.plot(lu_blocks)
+# Добавление в модель типов землепользования
+District_spb.update_land_use(lu_blocks)
+
+# Обеспеченность бассейнами до изменений
+my_sp = gpd.read_file(os.path.join(data_path, 'swimming_pool_MR.geojson'))
+my_gdf_MR1 = my_sp.reset_index(drop=True).to_crs(local_crs)
+District_spb.update_services('swimming_pool', my_gdf_MR1)
+
+# Расчет обеспеченности бассейнами до изменений
+prov_swimming_pool_before = Provision(city_model=District_spb)
+prov_res_swimming_pool_before = prov_swimming_pool_before.calculate('swimming_pool')
+prov_swimming_pool_before.plot(prov_res_swimming_pool_before)
+
+# Обеспеченность бассейнами после изменений
+service_type = District_spb['swimming_pool']
+service_type.demand = 11
+service_type.accessibility = 15
+service_type.bricks = []
+my_bricks = [
+    {"capacity": 50, "area": 700.0, "is_integrated": False, "parking_area": 0},
+    {"capacity": 100, "area": 1000.0, "is_integrated": False, "parking_area": 0},
+    {"capacity": 300, "area": 3000.0, "is_integrated": False, "parking_area": 0},
+    {"capacity": 30, "area": 300.0, "is_integrated": True, "parking_area": 125.0},
+    {"capacity": 50, "area": 500.0, "is_integrated": True, "parking_area": 220.0},
+    {"capacity": 100, "area": 900.0, "is_integrated": True, "parking_area": 500.0}
+]
+for my_brick in my_bricks:
+    brick = ServiceBrick(**my_brick)
+    service_type.bricks.append(brick)
+
+prov_swimming_pool_after = Provision(city_model=District_spb)
+prov_res_swimming_pool_after = prov_swimming_pool_after.calculate('swimming_pool')
+prov_swimming_pool_after.plot(prov_res_swimming_pool_after)
+
+# Обеспеченность спортивными объектами до изменений
+my_sp = gpd.read_file(os.path.join(data_path, 'sports_section_MR.geojson'))
+my_gdf1 = my_sp.reset_index(drop=True).to_crs(local_crs)
+District_spb.update_services('sport_centre', my_gdf1)
+
+prov_sport_centre_before = Provision(city_model=District_spb)
+prov_sport_centre_res_before = prov_sport_centre_before.calculate('sport_centre')
+prov_sport_centre_before.plot(prov_sport_centre_res_before)
+
+# Обеспеченность спортивными объектами после изменений
+service_type = District_spb['sport_centre']
+service_type.demand = 122
+service_type.accessibility = 15
+service_type.bricks = []
+my_bricks = [
+    {"capacity": 50, "area": 700.0, "is_integrated": False, "parking_area": 0},
+    {"capacity": 100, "area": 1000.0, "is_integrated": False, "parking_area": 0},
+    {"capacity": 300, "area": 3000.0, "is_integrated": False, "parking_area": 0},
+    {"capacity": 30, "area": 300.0, "is_integrated": True, "parking_area": 125.0},
+    {"capacity": 50, "area": 500.0, "is_integrated": True, "parking_area": 220.0},
+    {"capacity": 100, "area": 900.0, "is_integrated": True, "parking_area": 500.0}
+]
+for my_brick in my_bricks:
+    brick = ServiceBrick(**my_brick)
+    service_type.bricks.append(brick)
+
+prov_sport_centre_after = Provision(city_model=District_spb)
+prov_sport_centre_res_after = prov_sport_centre_after.calculate('sport_centre')
+prov_sport_centre_after.plot(prov_sport_centre_res_after)
+
+# Обеспеченность рекреационными зонами до изменений
+my_sp = gpd.read_file(os.path.join(data_path, 'park_MR.geojson'))
+my_gdf1 = my_sp.reset_index(drop=True).to_crs(local_crs)
+District_spb.update_services('park', my_gdf1)
+
+prov_park_before = Provision(city_model=District_spb)
+prov_res_park_before = prov_park_before.calculate('park')
+prov_park_before.plot(prov_res_park_before)
+
+# Обеспеченность рекреационными зонами после изменений
+service_type = District_spb['park']
+service_type.demand = 191
+service_type.accessibility = 30
+service_type.bricks = []
+my_bricks = [
+    {"capacity": 50, "area": 700.0, "is_integrated": False, "parking_area": 0},
+    {"capacity": 100, "area": 1000.0, "is_integrated": False, "parking_area": 0},
+    {"capacity": 300, "area": 3000.0, "is_integrated": False, "parking_area": 0},
+    {"capacity": 30, "area": 300.0, "is_integrated": True, "parking_area": 125.0},
+    {"capacity": 50, "area": 500.0, "is_integrated": True, "parking_area": 220.0},
+    {"capacity": 100, "area": 900.0, "is_integrated": True, "parking_area": 500.0}
+]
+for my_brick in my_bricks:
+    brick = ServiceBrick(**my_brick)
+    service_type.bricks.append(brick)
+
+prov_park_after = Provision(city_model=District_spb)
+prov_park_res_after = prov_park_after.calculate('park')
+prov_park_after.plot(prov_park_res_after)
+
+# Сохранение результатов обеспеченности
+# Бассейны до изменения
+file_path = os.path.join(data_path, 'prov_swimming_pool_before.geojson')
+prov_res_swimming_pool_before.to_file(file_path)
+
+# Бассейны после изменения
+file_path = os.path.join(data_path, 'prov_swimming_pool_after.geojson')
+prov_res_swimming_pool_after.to_file(file_path)
+
+# Спортивные объекты до изменения
+file_path = os.path.join(data_path, 'provision_sport_centre_before.geojson')
+prov_sport_centre_res_before.to_file(file_path)
+
+# Спортивные объекты после изменения
+file_path = os.path.join(data_path, 'provision_sport_centre_after.geojson')
+prov_sport_centre_res_after.to_file(file_path)
+
+# Рекреационные зоны до изменения
+file_path = os.path.join(data_path, 'provision_park_before.geojson')
+prov_res_park_before.to_file(file_path)
+
+# Рекреационные зоны после изменения
+file_path = os.path.join(data_path, 'provision_park_after.geojson')
+prov_park_res_after.to_file(file_path)
+
+# Сохранение модели
+District_spb.to_pickle('District_spb.pickle')
+
+# Загрузка модели для проверки
+District_spb = City.from_pickle('District_spb.pickle')
+print(District_spb)
